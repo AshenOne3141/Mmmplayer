@@ -3,12 +3,18 @@
 #include <iostream>
 #include "../include/Renderer.h"
 #include "../include/Window.h"
-
+#include <vector>
 Renderer::Renderer(Window& win)
     : window(win),
     renderer(nullptr),
-    texture(nullptr)
+    texture(nullptr),
+    frameNumber(0),
+    paused(false),
+    speed(1)
+
+   
 {
+    pixels.resize(800 * 800);
 }
 Renderer::~Renderer() {
     if (texture)
@@ -40,6 +46,30 @@ bool Renderer::initialise() {
       
 }
 void Renderer::render() {
+
+    for (int y = 0; y < 800; y++) {
+
+        for (int x = 0; x < 800; x++) {
+
+            uint8_t r = (x + frameNumber) % 256;
+            uint8_t g = (y + frameNumber) % 256;
+            uint8_t b = (x + y + frameNumber) % 256;
+
+            pixels[y * 800 + x] =
+                (255 << 24) |
+                (r << 16) |
+                (g << 8) |
+                b;
+        }
+    }
+
+    SDL_UpdateTexture(
+        texture,
+        nullptr,
+        pixels.data(),
+        800 * sizeof(uint32_t)
+    );
+
     SDL_RenderClear(renderer);
 
     SDL_RenderTexture(
@@ -50,6 +80,23 @@ void Renderer::render() {
     );
 
     SDL_RenderPresent(renderer);
+
+    if(!paused)frameNumber+=speed;
 }
+void Renderer::togglePause() {
+    paused = !paused;
+}
+
+void Renderer::increaseSpeed() {
+    speed++;
+}
+
+void Renderer::decreaseSpeed() {
+
+    if (speed > 1)
+        speed--;
+}
+   
+
 
 	

@@ -15,11 +15,41 @@ int main(int argc, char* argv[]) {
 
     bool running = true;
 
-    while (running) {
+    SDL_Event event;
 
-        running = window.processEvents();
+    while (running)
+    {
+        while (SDL_PollEvent(&event))
+        {
+            if (event.type == SDL_EVENT_QUIT)
+                running = false;
+
+            if (event.type == SDL_EVENT_KEY_DOWN)
+            {
+                switch (event.key.key)
+                {
+                case SDLK_ESCAPE:
+                    running = false;
+                    break;
+
+                case SDLK_SPACE:
+                    renderer.togglePause();
+                    break;
+
+                case SDLK_UP:
+                    renderer.increaseSpeed();
+                    break;
+
+                case SDLK_DOWN:
+                    renderer.decreaseSpeed();
+                    break;
+                }
+            }
+        }
 
         renderer.render();
+
+        SDL_Delay(16);
     }
 
     return 0;
