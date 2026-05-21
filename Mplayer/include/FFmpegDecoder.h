@@ -1,12 +1,13 @@
 #pragma once
 
+extern "C" {
 
-
-    #include <libavformat/avformat.h>
     #include <libavcodec/avcodec.h>
-
-
+    #include <libavformat/avformat.h>
+    #include <libswscale/swscale.h>
+}
 #include <string>
+#include <iostream>
 
 class FFmpegDecoder {
 
@@ -16,8 +17,9 @@ public:
     ~FFmpegDecoder();
 
     bool openFile(const std::string& path);
+    bool decodeFrame();
 
-    bool decodeOneFrame();
+   
 
 private:
 
