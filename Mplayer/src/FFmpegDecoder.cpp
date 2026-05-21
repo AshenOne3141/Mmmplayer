@@ -3,9 +3,9 @@ extern "C" {
     #include <libavcodec/avcodec.h>
     #include <libavformat/avformat.h>
     #include <libswscale/swscale.h>
-
+    #include <libavutil/imgutils.h>
 }
-
+#include<vector>
 #include <string>
 #include <iostream>
 
@@ -16,7 +16,9 @@ FFmpegDecoder::FFmpegDecoder()
     codecContext(nullptr),
     frame(av_frame_alloc()),
     packet(av_packet_alloc()),
-    videoStreamIndex(-1)
+    videoStreamIndex(-1),
+    rgbframe(av_frame_alloc()),
+    swsContext(nullptr)
 {
 }
 
@@ -33,6 +35,10 @@ FFmpegDecoder::~FFmpegDecoder() {
 
     if (formatContext)
         avformat_close_input(&formatContext);
+    if (rgbframe)
+        av_frame_free(&rgbframe);
+    if (swsContext)
+        sws_freeContext(swsContext);
 }
 
 bool FFmpegDecoder::openFile(const std::string& path) {
@@ -104,4 +110,61 @@ bool FFmpegDecoder::openFile(const std::string& path) {
     std::cout << "Decoder initialized\n";
 
     return true;
+}
+bool FFmpegDecoder::decodeFrame() {
+    std::cout << "decodeFrame called\n";
+    if (frame == NULL) {
+        std::cout << "No Frame Allocated\n";
+        return 0;
+    }
+    if (codecContext == NULL) {
+        std::cout << "No Codex Context\n";
+        return 0;
+    }
+
+    
+    int ByteSize;
+    ByteSize = av_image_get_buffer_size(AV_PIX_FMT_RGB24,  codecContext->width, codecContext->height, 1);
+    buffer.resize(ByteSize);
+    av_image_fill_arrays(rgbframe->data, rgbframe->linesize, buffer.data(), AV_PIX_FMT_RGB24, codecContext->width, codecContext->height, 1);
+    swsContext = sws_getContext(codecContext->width, codecContext->height, codecContext->pix_fmt, codecContext->width, codecContext->height, AV_PIX_FMT_RGB24,SWS_BILINEAR,NULL,NULL,NULL);
+   
+    while (av_read_frame(formatContext, packet) >= 0) {
+        if (packet->stream_index == videoStreamIndex) {
+            if (avcodec_send_packet(codecContext, packet) < 0)return 0;
+            while (!avcodec_receive_frame(codecContext, frame)) { 
+                std::cout << "Frame Decoded\n";
+                sws_scale(swsContext, frame->data, frame->linesize, 0, codecContext->height, rgbframe->data, rgbframe->linesize);
+
+
+
+               
+            }
+
+        }
+        av_packet_unref(packet);
+
+        return true;
+    }
+
+
+
+}
+int FFmpegDecoder::getWidth() {
+
+    return codecContext->width;
+}
+
+int FFmpegDecoder::getHeight() {
+
+    return codecContext->height;
+}
+AVFrame* FFmpegDecoder::getRGBFrame() {
+
+    return rgbframe;
+}
+double FFmpegDecoder::getfps() {
+    return av_q2d(formatContext
+        ->streams[videoStreamIndex]
+        ->avg_frame_rate);
 }

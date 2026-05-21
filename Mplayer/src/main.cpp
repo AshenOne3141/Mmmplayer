@@ -1,33 +1,47 @@
 #include "../include/Window.h"
 #include "../include/Renderer.h"
+#include "../include/FFmpegDecoder.h"
 
 int main(int argc, char* argv[]) {
 
+    FFmpegDecoder decoder;
+
+    if (!decoder.openFile("C:\\Users\\jaisw\\Downloads\\file_example_MP4_1920_18MG.mp4"))
+        return -1;
+
     Window window;
 
-    if (!window.initialise())
+    if (!window.initialise(
+        decoder.getWidth(),
+        decoder.getHeight()))
+    {
         return -1;
+    }
 
     Renderer renderer(window);
 
-    if (!renderer.initialise())
+    if (!renderer.initialise(
+        decoder.getWidth(),
+        decoder.getHeight()))
+    {
         return -1;
+    }
 
     bool running = true;
 
     SDL_Event event;
 
-    while (running)
-    {
-        while (SDL_PollEvent(&event))
-        {
+    while (running) {
+
+        while (SDL_PollEvent(&event)) {
+
             if (event.type == SDL_EVENT_QUIT)
                 running = false;
 
-            if (event.type == SDL_EVENT_KEY_DOWN)
-            {
-                switch (event.key.key)
-                {
+            if (event.type == SDL_EVENT_KEY_DOWN) {
+
+                switch (event.key.key) {
+
                 case SDLK_ESCAPE:
                     running = false;
                     break;
@@ -47,9 +61,14 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        renderer.render();
+        if (decoder.decodeFrame()) {
 
-        SDL_Delay(16);
+            renderer.render(
+                decoder.getRGBFrame()
+            );
+        }
+
+        SDL_Delay(1000/decoder.getfps());
     }
 
     return 0;

@@ -11,15 +11,15 @@ Window::~Window() {
     if(window)SDL_DestroyWindow(window);
     SDL_Quit();
 }
-bool Window::initialise() {
+bool Window::initialise(int w,int h) {
 
-    if (!SDL_Init(SDL_INIT_VIDEO) ) {
+    if (SDL_Init(SDL_INIT_VIDEO)<0 ) {
         std::cout << "INITIALISATION ERROR "
             << SDL_GetError();
         return false;
     }
 
-    window = SDL_CreateWindow("Interface", 800, 800, SDL_WINDOW_OPENGL);
+    window = SDL_CreateWindow("Interface", w, h, SDL_WINDOW_OPENGL);
 
     if (!window)
     {    std::cout << SDL_GetError() << '\n';

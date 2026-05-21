@@ -4,18 +4,18 @@
 #include "../include/Renderer.h"
 #include "../include/Window.h"
 #include <vector>
+#include "../include/FFmpegDecoder.h"
 Renderer::Renderer(Window& win)
     : window(win),
     renderer(nullptr),
     texture(nullptr),
     frameNumber(0),
     paused(false),
-    speed(1)
+    speed(1) {
+}
 
    
-{
-    pixels.resize(800 * 800);
-}
+
 Renderer::~Renderer() {
     if (texture)
         SDL_DestroyTexture(texture);
@@ -23,16 +23,16 @@ Renderer::~Renderer() {
     if (renderer)
         SDL_DestroyRenderer(renderer);
 }
-bool Renderer::initialise() {
+bool Renderer::initialise(int w,int h) {
     
 	renderer = SDL_CreateRenderer(window.get_window(),nullptr);
     if (!renderer) {
         std::cout << "Renderer not initialised\n";
         return false;
     }
-    SDL_Surface* surface = IMG_Load("C:\\Users\\jaisw\\OneDrive\\Pictures\\images.jpg");
-    texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_DestroySurface(surface);
+   
+    texture = SDL_CreateTexture(renderer,SDL_PIXELFORMAT_RGB24,SDL_TEXTUREACCESS_STREAMING,w,h);
+    
     if (!texture) {
 
         std::cout << "Texture creation failed\n";
@@ -45,29 +45,13 @@ bool Renderer::initialise() {
 
       
 }
-void Renderer::render() {
-
-    for (int y = 0; y < 800; y++) {
-
-        for (int x = 0; x < 800; x++) {
-
-            uint8_t r = (x + frameNumber) % 256;
-            uint8_t g = (y + frameNumber) % 256;
-            uint8_t b = (x + y + frameNumber) % 256;
-
-            pixels[y * 800 + x] =
-                (255 << 24) |
-                (r << 16) |
-                (g << 8) |
-                b;
-        }
-    }
+void Renderer::render(AVFrame* rgbFrame) {
 
     SDL_UpdateTexture(
         texture,
         nullptr,
-        pixels.data(),
-        800 * sizeof(uint32_t)
+       rgbFrame->data[0],
+       rgbFrame->linesize[0]
     );
 
     SDL_RenderClear(renderer);
