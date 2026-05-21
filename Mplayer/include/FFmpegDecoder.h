@@ -26,6 +26,9 @@ public:
     int getHeight();
     AVFrame* getRGBFrame();
     double getfps();
+    void togglePause();
+    void rewind();
+    void forward();
 private:
 
     AVFormatContext* formatContext;
@@ -38,4 +41,5 @@ private:
     
     std::vector<uint8_t> buffer;
     int videoStreamIndex;
+    bool paused;
 };

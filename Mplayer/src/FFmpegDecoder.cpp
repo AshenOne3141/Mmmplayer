@@ -18,7 +18,8 @@ FFmpegDecoder::FFmpegDecoder()
     packet(av_packet_alloc()),
     videoStreamIndex(-1),
     rgbframe(av_frame_alloc()),
-    swsContext(nullptr)
+    swsContext(nullptr),
+    paused(false)
 {
 }
 
@@ -137,7 +138,7 @@ bool FFmpegDecoder::decodeFrame() {
             codecContext->height, rgbframe->data, rgbframe->linesize);
         return true;
     }
-   
+    if (paused)return true;
     while (av_read_frame(formatContext, packet) >= 0) {
 
         if (packet->stream_index == videoStreamIndex) {
@@ -188,4 +189,22 @@ double FFmpegDecoder::getfps() {
     return av_q2d(formatContext
         ->streams[videoStreamIndex]
         ->avg_frame_rate);
+}
+void FFmpegDecoder::togglePause() {
+    paused = !paused;
+}
+
+void FFmpegDecoder::rewind() {
+    int64_t offset = av_rescale_q(10, AVRational { 1, 1 }, formatContext->streams[videoStreamIndex]->time_base);
+    
+    av_seek_frame(formatContext, videoStreamIndex, frame->pts-offset, AVSEEK_FLAG_BACKWARD);
+
+    avcodec_flush_buffers(codecContext);
+}
+void FFmpegDecoder::forward() {
+    int64_t offset = av_rescale_q(10, AVRational{ 1, 1 }, formatContext->streams[videoStreamIndex]->time_base);
+
+    av_seek_frame(formatContext, videoStreamIndex, frame->pts + offset, 0);
+
+    avcodec_flush_buffers(codecContext);
 }

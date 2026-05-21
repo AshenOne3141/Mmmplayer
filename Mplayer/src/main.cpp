@@ -6,7 +6,7 @@ int main(int argc, char* argv[]) {
 
     FFmpegDecoder decoder;
 
-    if (!decoder.openFile("C:\\Users\\jaisw\\Downloads\\file_example_MP4_1920_18MG.mp4"))
+    if (!decoder.openFile("C:\\Users\\jaisw\\Downloads\\The Boys S05E07 The Frenchman the Female and the Man Called Mother's Milk 720p AMZN WEB-DL DD 5 1 Atmos H 264-playWEB[EZTVx.to].mkv"))
         return -1;
 
     Window window;
@@ -42,21 +42,19 @@ int main(int argc, char* argv[]) {
 
                 switch (event.key.key) {
 
-                case SDLK_ESCAPE:
-                    running = false;
-                    break;
+               
 
                 case SDLK_SPACE:
-                    renderer.togglePause();
+                    decoder.togglePause();
+                    break;
+                case SDLK_LEFT:
+                    decoder.rewind();
+                    break;
+                case SDLK_RIGHT:
+                    decoder.forward();
                     break;
 
-                case SDLK_UP:
-                    renderer.increaseSpeed();
-                    break;
-
-                case SDLK_DOWN:
-                    renderer.decreaseSpeed();
-                    break;
+               
                 }
             }
         }

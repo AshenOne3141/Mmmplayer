@@ -12,9 +12,7 @@ public:
 	~Renderer();
 	bool initialise(int w,int h);
 	void render(AVFrame* rgbFrame);
-	void togglePause();
-	void increaseSpeed();
-	void decreaseSpeed();
+	
 private:
 	SDL_Renderer* renderer;
 	SDL_Texture* texture;

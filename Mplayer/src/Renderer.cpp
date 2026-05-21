@@ -67,20 +67,5 @@ void Renderer::render(AVFrame* rgbFrame) {
 
     if(!paused)frameNumber+=speed;
 }
-void Renderer::togglePause() {
-    paused = !paused;
-}
-
-void Renderer::increaseSpeed() {
-    speed++;
-}
-
-void Renderer::decreaseSpeed() {
-
-    if (speed > 1)
-        speed--;
-}
-   
-
 
 	
