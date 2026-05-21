@@ -107,6 +107,7 @@ bool FFmpegDecoder::openFile(const std::string& path) {
         return false;
     }
 
+
     std::cout << "Decoder initialized\n";
 
     return true;
@@ -128,26 +129,46 @@ bool FFmpegDecoder::decodeFrame() {
     buffer.resize(ByteSize);
     av_image_fill_arrays(rgbframe->data, rgbframe->linesize, buffer.data(), AV_PIX_FMT_RGB24, codecContext->width, codecContext->height, 1);
     swsContext = sws_getContext(codecContext->width, codecContext->height, codecContext->pix_fmt, codecContext->width, codecContext->height, AV_PIX_FMT_RGB24,SWS_BILINEAR,NULL,NULL,NULL);
+
+    
+    int ret = avcodec_receive_frame(codecContext, frame);
+    if (ret == 0) {
+        sws_scale(swsContext, frame->data, frame->linesize, 0,
+            codecContext->height, rgbframe->data, rgbframe->linesize);
+        return true;
+    }
    
     while (av_read_frame(formatContext, packet) >= 0) {
+
         if (packet->stream_index == videoStreamIndex) {
-            if (avcodec_send_packet(codecContext, packet) < 0)return 0;
+
+            if (avcodec_send_packet(codecContext, packet) < 0) {
+                av_packet_unref(packet); return 0;
+            }
+            av_packet_unref(packet);
+
             while (!avcodec_receive_frame(codecContext, frame)) { 
-                std::cout << "Frame Decoded\n";
+
+
                 sws_scale(swsContext, frame->data, frame->linesize, 0, codecContext->height, rgbframe->data, rgbframe->linesize);
 
 
+                std::cout << "Frame Decoded\n";
+                return true;
 
                
             }
 
         }
-        av_packet_unref(packet);
+        else {
+            av_packet_unref(packet);
 
-        return true;
+        }
+
+        
     }
 
-
+    return false;
 
 }
 int FFmpegDecoder::getWidth() {
