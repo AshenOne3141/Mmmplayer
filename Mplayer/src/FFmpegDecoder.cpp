@@ -14,9 +14,11 @@ extern "C" {
 FFmpegDecoder::FFmpegDecoder()
     : formatContext(nullptr),
     codecContext(nullptr),
+    acodecContext(nullptr),
     frame(av_frame_alloc()),
     packet(av_packet_alloc()),
     videoStreamIndex(-1),
+    audioStreamIndex(-1),
     rgbframe(av_frame_alloc()),
     swsContext(nullptr),
     paused(false)
@@ -60,14 +62,21 @@ bool FFmpegDecoder::openFile(const std::string& path) {
 
     for (unsigned int i = 0; i < formatContext->nb_streams; i++) {
 
-        if (formatContext->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+        if (formatContext->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && videoStreamIndex<0) {
 
             videoStreamIndex = i;
 
-            break;
+            
+        }
+
+        if (formatContext->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&audioStreamIndex<0) {
+
+            audioStreamIndex = i;
+
         }
     }
 
+    
     if (videoStreamIndex == -1) {
 
         std::cout << "No video stream found\n";
@@ -75,8 +84,15 @@ bool FFmpegDecoder::openFile(const std::string& path) {
         return false;
     }
 
-    const AVCodec* codec =
-        avcodec_find_decoder(formatContext->streams[videoStreamIndex]->codecpar->codec_id);
+    if (audioStreamIndex == -1) {
+        std::cout << "No audio stream found\n";
+
+        return false;
+    }
+
+    const AVCodec* codec =avcodec_find_decoder(formatContext->streams[videoStreamIndex]->codecpar->codec_id);
+
+    const AVCodec* audioCodec= avcodec_find_decoder(formatContext->streams[audioStreamIndex]->codecpar->codec_id);
 
     if (codec == nullptr) {
 
@@ -85,35 +101,73 @@ bool FFmpegDecoder::openFile(const std::string& path) {
         return false;
     }
 
+    if (audioCodec == nullptr) {
+
+        std::cout << "Unsupported Codec\n";
+
+        return false;
+    }
+
     codecContext = avcodec_alloc_context3(codec);
+    acodecContext = avcodec_alloc_context3(audioCodec);
 
     if (!codecContext) {
 
-        std::cout << "Failed to allocate codec context\n";
+        std::cout << "Failed to allocate video codec context\n";
+
+        return false;
+    }
+    if (!acodecContext) {
+
+        std::cout << "Failed to allocate audio codec context\n";
 
         return false;
     }
 
     if (avcodec_parameters_to_context(codecContext,formatContext->streams[videoStreamIndex]->codecpar) < 0) {
 
-        std::cout << "Copying to Context Failed\n";
+        std::cout << "Copying to Video Context Failed\n";
+
+        return false;
+    }
+    if (avcodec_parameters_to_context(acodecContext, formatContext->streams[audioStreamIndex]->codecpar) < 0) {
+
+        std::cout << "Copying to Audio Context Failed\n";
 
         return false;
     }
 
     if (avcodec_open2(codecContext, codec, nullptr) < 0) {
 
-        std::cout << "Failed to open codec\n";
+        std::cout << "Failed to open video codec\n";
+
+        return false;
+    }
+    if (avcodec_open2(acodecContext, audioCodec, nullptr) < 0) {
+
+        std::cout << "Failed to open audio codec\n";
 
         return false;
     }
 
 
     std::cout << "Decoder initialized\n";
+       int ByteSize;
+    ByteSize = av_image_get_buffer_size(AV_PIX_FMT_RGB24,  codecContext->width, codecContext->height, 1);
+    buffer.resize(ByteSize);
+    av_image_fill_arrays(rgbframe->data, rgbframe->linesize, buffer.data(), AV_PIX_FMT_RGB24, codecContext->width, codecContext->height, 1);
+    swsContext = sws_getContext(codecContext->width, codecContext->height, codecContext->pix_fmt, codecContext->width, codecContext->height, AV_PIX_FMT_RGB24,SWS_BILINEAR,NULL,NULL,NULL);
 
     return true;
 }
-bool FFmpegDecoder::decodeFrame() {
+
+
+
+
+
+
+
+bool FFmpegDecoder::decode() {
     std::cout << "decodeFrame called\n";
     if (frame == NULL) {
         std::cout << "No Frame Allocated\n";
@@ -125,42 +179,27 @@ bool FFmpegDecoder::decodeFrame() {
     }
 
     
-    int ByteSize;
-    ByteSize = av_image_get_buffer_size(AV_PIX_FMT_RGB24,  codecContext->width, codecContext->height, 1);
-    buffer.resize(ByteSize);
-    av_image_fill_arrays(rgbframe->data, rgbframe->linesize, buffer.data(), AV_PIX_FMT_RGB24, codecContext->width, codecContext->height, 1);
-    swsContext = sws_getContext(codecContext->width, codecContext->height, codecContext->pix_fmt, codecContext->width, codecContext->height, AV_PIX_FMT_RGB24,SWS_BILINEAR,NULL,NULL,NULL);
+ 
 
     
     int ret = avcodec_receive_frame(codecContext, frame);
-    if (ret == 0) {
+   /* if (ret == 0) {
         sws_scale(swsContext, frame->data, frame->linesize, 0,
             codecContext->height, rgbframe->data, rgbframe->linesize);
         return true;
-    }
+    }*/
     if (paused)return true;
     while (av_read_frame(formatContext, packet) >= 0) {
 
         if (packet->stream_index == videoStreamIndex) {
-
-            if (avcodec_send_packet(codecContext, packet) < 0) {
-                av_packet_unref(packet); return 0;
-            }
-            av_packet_unref(packet);
-
-            while (!avcodec_receive_frame(codecContext, frame)) { 
-
-
-                sws_scale(swsContext, frame->data, frame->linesize, 0, codecContext->height, rgbframe->data, rgbframe->linesize);
-
-
-                std::cout << "Frame Decoded\n";
-                return true;
-
-               
-            }
+            return processFrame();
+            
 
         }
+        /*else if (packet->stream_index == audioStreamIndex) {
+            return processAudio();
+
+        }*/
         else {
             av_packet_unref(packet);
 
@@ -172,6 +211,61 @@ bool FFmpegDecoder::decodeFrame() {
     return false;
 
 }
+
+bool FFmpegDecoder::processFrame() {
+    if (avcodec_send_packet(codecContext, packet) < 0) {
+        av_packet_unref(packet); return 0;
+    }
+    av_packet_unref(packet);
+
+    while (!avcodec_receive_frame(codecContext, frame)) {
+
+
+        sws_scale(swsContext, frame->data, frame->linesize, 0, codecContext->height, rgbframe->data, rgbframe->linesize);
+
+
+        std::cout << "Frame Decoded\n";
+        return true;
+
+
+    }
+    return false;
+}
+
+bool FFmpegDecoder::processAudio() {
+    
+
+   
+        
+        if (avcodec_send_packet(acodecContext, packet) < 0) {
+                av_packet_unref(packet); return 0;
+        }
+
+        
+        else {
+           
+            av_packet_unref(packet);
+            return true;
+
+        }
+
+
+    
+
+    return false;
+
+}
+
+
+
+
+
+
+
+
+
+
+
 int FFmpegDecoder::getWidth() {
 
     return codecContext->width;

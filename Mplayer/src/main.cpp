@@ -38,7 +38,8 @@ int main(int argc, char* argv[]) {
             if (event.type == SDL_EVENT_QUIT)
                 running = false;
 
-            if (event.type == SDL_EVENT_KEY_DOWN) {
+            if (event.type == SDL_EVENT_KEY_DOWN &&
+                !event.key.repeat) {
 
                 switch (event.key.key) {
 
@@ -59,7 +60,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        if (decoder.decodeFrame()) {
+        if (decoder.decode()) {
 
             renderer.render(
                 decoder.getRGBFrame()

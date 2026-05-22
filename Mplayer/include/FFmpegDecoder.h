@@ -19,7 +19,9 @@ public:
     ~FFmpegDecoder();
 
     bool openFile(const std::string& path);
-    bool decodeFrame();
+    bool decode();
+    bool processAudio();
+    bool processFrame();
 
     int getWidth();
 
@@ -33,6 +35,7 @@ private:
 
     AVFormatContext* formatContext;
     AVCodecContext* codecContext;
+    AVCodecContext* acodecContext;
     SwsContext* swsContext = NULL;
 
     AVFrame* frame;
@@ -41,5 +44,6 @@ private:
     
     std::vector<uint8_t> buffer;
     int videoStreamIndex;
+    int audioStreamIndex;
     bool paused;
 };
