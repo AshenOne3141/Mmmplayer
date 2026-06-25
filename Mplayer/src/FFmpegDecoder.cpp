@@ -16,34 +16,43 @@ FFmpegDecoder::FFmpegDecoder()
     codecContext(nullptr),
     acodecContext(nullptr),
     frame(av_frame_alloc()),
+    audioframe(av_frame_alloc()),
+    convertedFrame(av_frame_alloc()),
     packet(av_packet_alloc()),
     videoStreamIndex(-1),
     audioStreamIndex(-1),
     rgbframe(av_frame_alloc()),
     swsContext(nullptr),
-    paused(false)
+    swrContext(nullptr),
+    paused(false),
+    audioReady(false)
 {
 }
 
 FFmpegDecoder::~FFmpegDecoder() {
 
-    if (frame)
-        av_frame_free(&frame);
+    av_frame_free(&frame);
 
-    if (packet)
-        av_packet_free(&packet);
+    av_frame_free(&audioframe);
 
-    if (codecContext)
-        avcodec_free_context(&codecContext);
+    av_frame_free(&convertedFrame);
 
-    if (formatContext)
-        avformat_close_input(&formatContext);
+    av_packet_free(&packet);
+
+    avcodec_free_context(&codecContext);
+
+    avcodec_free_context(&acodecContext);
+
+    avformat_close_input(&formatContext);
+
     if (rgbframe)
         av_frame_free(&rgbframe);
+
     if (swsContext)
         sws_freeContext(swsContext);
-}
 
+    swr_free(&swrContext);
+}
 bool FFmpegDecoder::openFile(const std::string& path) {
 
     if (avformat_open_input(&formatContext, path.c_str(), nullptr, nullptr) != 0) {
@@ -157,6 +166,8 @@ bool FFmpegDecoder::openFile(const std::string& path) {
     buffer.resize(ByteSize);
     av_image_fill_arrays(rgbframe->data, rgbframe->linesize, buffer.data(), AV_PIX_FMT_RGB24, codecContext->width, codecContext->height, 1);
     swsContext = sws_getContext(codecContext->width, codecContext->height, codecContext->pix_fmt, codecContext->width, codecContext->height, AV_PIX_FMT_RGB24,SWS_BILINEAR,NULL,NULL,NULL);
+    AVChannelLayout stereoLayout = AV_CHANNEL_LAYOUT_STEREO;
+    swrContext = swr_alloc_set_opts2(&swrContext, &stereoLayout, AV_SAMPLE_FMT_S16, 44100, &acodecContext->ch_layout, acodecContext->sample_fmt, acodecContext->sample_rate, 0, nullptr);
 
     return true;
 }
@@ -196,10 +207,10 @@ bool FFmpegDecoder::decode() {
             
 
         }
-        /*else if (packet->stream_index == audioStreamIndex) {
+        else if (packet->stream_index == audioStreamIndex) {
             return processAudio();
 
-        }*/
+        }
         else {
             av_packet_unref(packet);
 
@@ -235,16 +246,22 @@ bool FFmpegDecoder::processFrame() {
 bool FFmpegDecoder::processAudio() {
     
 
-   
+        audioBuffer.resize(192000);
+        uint8_t* outData[1];
+        outData[0] = audioBuffer.data();
         
         if (avcodec_send_packet(acodecContext, packet) < 0) {
-                av_packet_unref(packet); return 0;
-        }
-
-        
-        else {
-           
             av_packet_unref(packet);
+            return false;
+
+        }
+        av_packet_unref(packet);
+        while (avcodec_receive_frame(acodecContext, audioframe) == 0) {
+            int samples = swr_convert(swrContext, outData, audioframe->nb_samples,( const uint8_t**) audioframe->data, audioframe->nb_samples);
+            if (samples < 0)return false;
+            audioSize = av_samples_get_buffer_size(nullptr, 2, samples, AV_SAMPLE_FMT_S16, 1);
+            audioReady = true;
+
             return true;
 
         }
