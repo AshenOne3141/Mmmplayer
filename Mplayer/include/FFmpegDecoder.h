@@ -13,7 +13,9 @@ extern "C" {
 #include <string>
 #include <iostream>
 #include <vector>
-
+#include "./PacketQueue.h"
+#include <thread>
+#include <atomic>
 class FFmpegDecoder {
 
 public:
@@ -22,7 +24,7 @@ public:
     ~FFmpegDecoder();
 
     bool openFile(const std::string& path);
-    bool decode();
+    bool readPacket();
     bool processAudio();
     bool processFrame();
 
@@ -34,8 +36,12 @@ public:
     void togglePause();
     void rewind();
     void forward();
+    void startDecoder();
+    void stopDecoder();
+    void decodeLoop();
 private:
-
+    std::thread decodeThread;
+    std::atomic<bool> running;
     AVFormatContext* formatContext;
     AVCodecContext* codecContext;
     AVCodecContext* acodecContext;
@@ -45,7 +51,7 @@ private:
     AVFrame* rgbframe;
     AVPacket* packet;
     AVFrame* audioframe;
-    AVFrame* convertedFrame; 
+    
     std::vector<uint8_t> audioBuffer;
     int audioSize;
     bool audioReady;
@@ -54,4 +60,6 @@ private:
     int videoStreamIndex;
     int audioStreamIndex;
     bool paused;
+    PacketQueue videoQueue;
+    PacketQueue audioQueue;
 };

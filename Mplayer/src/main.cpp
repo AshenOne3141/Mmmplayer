@@ -6,8 +6,11 @@ int main(int argc, char* argv[]) {
 
     FFmpegDecoder decoder;
 
-    if (!decoder.openFile("C:\\Users\\jaisw\\Downloads\\The Boys S05E07 The Frenchman the Female and the Man Called Mother's Milk 720p AMZN WEB-DL DD 5 1 Atmos H 264-playWEB[EZTVx.to].mkv"))
+    if (!decoder.openFile(
+        "C:\\Users\\jaisw\\Downloads\\The Boys S05E07 The Frenchman the Female and the Man Called Mother's Milk 720p AMZN WEB-DL DD 5 1 Atmos H 264-playWEB[EZTVx.to].mkv"))
+    {
         return -1;
+    }
 
     Window window;
 
@@ -43,31 +46,39 @@ int main(int argc, char* argv[]) {
 
                 switch (event.key.key) {
 
-               
-
                 case SDLK_SPACE:
                     decoder.togglePause();
                     break;
+
                 case SDLK_LEFT:
                     decoder.rewind();
                     break;
+
                 case SDLK_RIGHT:
                     decoder.forward();
                     break;
-
-               
                 }
             }
         }
 
-        if (decoder.decode()) {
+        // Read one packet from the file and push it into the queues
+        if (!decoder.readPacket())
+            break;
 
-            renderer.render(
-                decoder.getRGBFrame()
-            );
-        }
+        // Decode one video packet
+        decoder.processFrame();
 
-        SDL_Delay(1000/decoder.getfps());
+        // Decode one audio packet
+        decoder.processAudio();
+
+        // Render the latest RGB frame
+        renderer.render(
+            decoder.getRGBFrame()
+        );
+
+        SDL_Delay(
+            static_cast<int>(1000.0 / decoder.getfps())
+        );
     }
 
     return 0;

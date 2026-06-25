@@ -8,6 +8,8 @@ extern "C" {
 #include<vector>
 #include <string>
 #include <iostream>
+#include "../include/PacketQueue.h"
+
 
 #include "../include/FFmpegDecoder.h"
 
@@ -17,7 +19,6 @@ FFmpegDecoder::FFmpegDecoder()
     acodecContext(nullptr),
     frame(av_frame_alloc()),
     audioframe(av_frame_alloc()),
-    convertedFrame(av_frame_alloc()),
     packet(av_packet_alloc()),
     videoStreamIndex(-1),
     audioStreamIndex(-1),
@@ -25,8 +26,10 @@ FFmpegDecoder::FFmpegDecoder()
     swsContext(nullptr),
     swrContext(nullptr),
     paused(false),
-    audioReady(false)
+    audioReady(false),
+    running(false)
 {
+
 }
 
 FFmpegDecoder::~FFmpegDecoder() {
@@ -34,8 +37,6 @@ FFmpegDecoder::~FFmpegDecoder() {
     av_frame_free(&frame);
 
     av_frame_free(&audioframe);
-
-    av_frame_free(&convertedFrame);
 
     av_packet_free(&packet);
 
@@ -167,19 +168,60 @@ bool FFmpegDecoder::openFile(const std::string& path) {
     av_image_fill_arrays(rgbframe->data, rgbframe->linesize, buffer.data(), AV_PIX_FMT_RGB24, codecContext->width, codecContext->height, 1);
     swsContext = sws_getContext(codecContext->width, codecContext->height, codecContext->pix_fmt, codecContext->width, codecContext->height, AV_PIX_FMT_RGB24,SWS_BILINEAR,NULL,NULL,NULL);
     AVChannelLayout stereoLayout = AV_CHANNEL_LAYOUT_STEREO;
-    swrContext = swr_alloc_set_opts2(&swrContext, &stereoLayout, AV_SAMPLE_FMT_S16, 44100, &acodecContext->ch_layout, acodecContext->sample_fmt, acodecContext->sample_rate, 0, nullptr);
 
+    if (swr_alloc_set_opts2(
+        &swrContext,
+        &stereoLayout,
+        AV_SAMPLE_FMT_S16,
+        44100,
+        &acodecContext->ch_layout,
+        acodecContext->sample_fmt,
+        acodecContext->sample_rate,
+        0,
+        nullptr) < 0)
+    {
+        std::cout << "Failed to allocate resampler\n";
+        return false;
+    }
+
+    if (swr_init(swrContext) < 0)
+    {
+        std::cout << "Failed to initialize resampler\n";
+        return false;
+    }
     return true;
+}
+
+void FFmpegDecoder::startDecoder()
+{
+    running = true;
+
+    decodeThread = std::thread(
+        &FFmpegDecoder::decodeLoop,
+        this
+    );
+}
+
+void FFmpegDecoder::decodeLoop() {
+
+    while (running) {
+        processFrame();
+        processAudio();
+    }
+}
+
+void FFmpegDecoder::stopDecoder()
+{
+    running = false;
+
+    if (decodeThread.joinable())
+        decodeThread.join();
 }
 
 
 
-
-
-
-
-bool FFmpegDecoder::decode() {
-    std::cout << "decodeFrame called\n";
+bool FFmpegDecoder::readPacket() {
+    std::cout << "readPacket called\n";
     if (frame == NULL) {
         std::cout << "No Frame Allocated\n";
         return 0;
@@ -193,28 +235,22 @@ bool FFmpegDecoder::decode() {
  
 
     
-    int ret = avcodec_receive_frame(codecContext, frame);
-   /* if (ret == 0) {
-        sws_scale(swsContext, frame->data, frame->linesize, 0,
-            codecContext->height, rgbframe->data, rgbframe->linesize);
-        return true;
-    }*/
-    if (paused)return true;
+   /* if (paused)return true;*/
     while (av_read_frame(formatContext, packet) >= 0) {
 
         if (packet->stream_index == videoStreamIndex) {
-            return processFrame();
+            videoQueue.push(packet);
             
 
         }
         else if (packet->stream_index == audioStreamIndex) {
-            return processAudio();
+            audioQueue.push(packet);
 
         }
-        else {
+        
             av_packet_unref(packet);
 
-        }
+            return true;
 
         
     }
@@ -224,10 +260,13 @@ bool FFmpegDecoder::decode() {
 }
 
 bool FFmpegDecoder::processFrame() {
-    if (avcodec_send_packet(codecContext, packet) < 0) {
-        av_packet_unref(packet); return 0;
+    AVPacket pkt;
+    videoQueue.pop(&pkt);
+
+    if (avcodec_send_packet(codecContext, &pkt) < 0) {
+        av_packet_unref(&pkt); return 0;
     }
-    av_packet_unref(packet);
+    av_packet_unref(&pkt);
 
     while (!avcodec_receive_frame(codecContext, frame)) {
 
@@ -244,18 +283,26 @@ bool FFmpegDecoder::processFrame() {
 }
 
 bool FFmpegDecoder::processAudio() {
-    
+    AVPacket pkt;
+
+    audioQueue.pop(&pkt);
+
+    avcodec_send_packet(
+        acodecContext,
+        &pkt
+    );
+
 
         audioBuffer.resize(192000);
         uint8_t* outData[1];
         outData[0] = audioBuffer.data();
         
-        if (avcodec_send_packet(acodecContext, packet) < 0) {
-            av_packet_unref(packet);
+        if (avcodec_send_packet(acodecContext, &pkt) < 0) {
+            av_packet_unref(&pkt);
             return false;
 
         }
-        av_packet_unref(packet);
+        av_packet_unref(&pkt);
         while (avcodec_receive_frame(acodecContext, audioframe) == 0) {
             int samples = swr_convert(swrContext, outData, audioframe->nb_samples,( const uint8_t**) audioframe->data, audioframe->nb_samples);
             if (samples < 0)return false;
